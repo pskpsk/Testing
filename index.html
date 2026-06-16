@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AB Groceries Admin Panel</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#f4f6f8;
+    padding:20px;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+}
+
+h1{
+    color:#2e7d32;
+    margin-bottom:20px;
+}
+
+.card{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    margin-bottom:20px;
+}
+
+.form-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:10px;
+}
+
+input,select{
+    padding:10px;
+    border:1px solid #ccc;
+    border-radius:6px;
+    width:100%;
+}
+
+button{
+    border:none;
+    padding:10px 15px;
+    border-radius:6px;
+    cursor:pointer;
+    color:white;
+}
+
+.save-btn{
+    background:#2e7d32;
+}
+
+.clear-btn{
+    background:#607d8b;
+}
+
+.edit-btn{
+    background:#1976d2;
+}
+
+.delete-btn{
+    background:#d32f2f;
+}
+
+.search-box{
+    width:100%;
+    margin-bottom:15px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:white;
+}
+
+th{
+    background:#2e7d32;
+    color:white;
+}
+
+th,td{
+    border:1px solid #ddd;
+    padding:10px;
+    text-align:center;
+}
+
+img{
+    width:60px;
+    height:60px;
+    object-fit:cover;
+    border-radius:6px;
+}
+
+.low-stock{
+    color:#ff9800;
+    font-weight:bold;
+}
+
+.out-stock{
+    color:red;
+    font-weight:bold;
+}
+
+.status{
+    margin-top:10px;
+    color:green;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>AB Groceries Admin</h1>
+
+<div class="card">
+
+<div class="form-grid">
+
+<input id="id" placeholder="Product ID">
+
+<input id="name" placeholder="Product Name">
+
+<input id="price" type="number" placeholder="Price">
+
+<input id="mrp" type="number" placeholder="MRP">
+
+<input id="unit" placeholder="Unit (1 kg, 500 ml...)">
+
+<input id="quantity" type="number" placeholder="Quantity">
+
+<input id="rating" type="number" step="0.1" placeholder="Rating">
+
+<select id="category">
+<option>Fruits</option>
+<option>Vegetables</option>
+<option>Dairy</option>
+<option>Bakery</option>
+<option>Snacks</option>
+<option>Beverages</option>
+<option>Rice & Grains</option>
+<option>Personal Care</option>
+</select>
+
+<input id="imageUrl" placeholder="Image URL">
+
+</div>
+
+<br>
+
+<button class="save-btn" onclick="saveProduct()">
+Save Product
+</button>
+
+<button class="clear-btn" onclick="clearForm()">
+Clear
+</button>
+
+<div id="status" class="status"></div>
+
+</div>
+
+<input
+class="search-box"
+id="search"
+placeholder="Search Product..."
+onkeyup="searchProducts()">
+
+<table>
+
+<thead>
+<tr>
+<th>Image</th>
+<th>Name</th>
+<th>Price</th>
+<th>MRP</th>
+<th>Discount</th>
+<th>Unit</th>
+<th>Stock</th>
+<th>Category</th>
+<th>Actions</th>
+</tr>
+</thead>
+
+<tbody id="productTable"></tbody>
+
+</table>
+
+</div>
+
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+getFirestore,
+collection,
+getDocs,
+doc,
+setDoc,
+deleteDoc
+}
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ===================================
+   FIREBASE CONFIG
+=================================== */
+
+const firebaseConfig = {
+
+  apiKey: "AIzaSyBA7JpG6PAnbkqCifMy5ldy4viNpDFllNA",
+
+  authDomain:
+  "ab-groceries-f2de1.firebaseapp.com",
+
+  projectId:
+  "ab-groceries-f2de1",
+
+  storageBucket:
+  "ab-groceries-f2de1.firebasestorage.app",
+
+  messagingSenderId:
+  "762760029392",
+
+  appId:
+  "1:762760029392:web:cd5abc36cca209dd3faad5"
+};
+
+const app = initializeApp(firebaseConfig);
+
+const db = getFirestore(app);
+
+let productCache = [];
+
+/* ===================================
+   SAVE PRODUCT
+=================================== */
+
+window.saveProduct = async function(){
+
+    const product = {
+
+        id:
+        document.getElementById("id").value.trim(),
+
+        name:
+        document.getElementById("name").value.trim(),
+
+        price:
+        Number(document.getElementById("price").value),
+
+        mrp:
+        Number(document.getElementById("mrp").value),
+
+        unit:
+        document.getElementById("unit").value.trim(),
+
+        rating:
+        Number(
+          document.getElementById("rating").value
+          || 4.5
+        ),
+
+        category:
+        document.getElementById("category").value,
+
+        imageUrl:
+        document.getElementById("imageUrl").value.trim(),
+
+        quantity:
+        Number(
+          document.getElementById("quantity").value
+        )
+    };
+
+    if(!product.id || !product.name){
+
+        alert("Product ID and Name are required");
+        return;
+    }
+
+    await setDoc(
+        doc(db,"products",product.id),
+        product
+    );
+
+    showStatus(
+        "Product saved successfully"
+    );
+
+    clearForm();
+
+    loadProducts();
+}
+
+/* ===================================
+   LOAD PRODUCTS
+=================================== */
+
+async function loadProducts(){
+
+    const table =
+    document.getElementById("productTable");
+
+    table.innerHTML = "";
+
+    productCache = [];
+
+    const snapshot =
+    await getDocs(
+        collection(db,"products")
+    );
+
+    snapshot.forEach((docSnap)=>{
+
+        const product = docSnap.data();
+
+        productCache.push(product);
+
+        const discount =
+        product.mrp > product.price
+        ? Math.floor(
+          ((product.mrp-product.price)*100)
+          / product.mrp
+        )
+        : 0;
+
+        let stockText = product.quantity;
+
+        if(product.quantity === 0){
+
+            stockText =
+            '<span class="out-stock">Out Of Stock</span>';
+        }
+        else if(product.quantity < 10){
+
+            stockText =
+            '<span class="low-stock">Low Stock</span>';
+        }
+
+        table.innerHTML += `
+        <tr>
+
+        <td>
+        <img
+        src="${product.imageUrl}"
+        onerror="this.src='https://via.placeholder.com/60'">
+        </td>
+
+        <td>${product.name}</td>
+
+        <td>₹${product.price}</td>
+
+        <td>₹${product.mrp}</td>
+
+        <td>${discount}%</td>
+
+        <td>${product.unit}</td>
+
+        <td>${stockText}</td>
+
+        <td>${product.category}</td>
+
+        <td>
+
+        <button
+        class="edit-btn"
+        onclick="editProduct('${product.id}')">
+        Edit
+        </button>
+
+        <button
+        class="delete-btn"
+        onclick="deleteProduct('${product.id}')">
+        Delete
+        </button>
+
+        </td>
+
+        </tr>
+        `;
+    });
+}
+
+/* ===================================
+   EDIT PRODUCT
+=================================== */
+
+window.editProduct = function(id){
+
+    const product =
+    productCache.find(
+        p => p.id === id
+    );
+
+    if(!product) return;
+
+    idInput(product.id);
+    name.value = product.name;
+    price.value = product.price;
+    mrp.value = product.mrp;
+    unit.value = product.unit;
+    quantity.value = product.quantity;
+    rating.value = product.rating;
+    category.value = product.category;
+    imageUrl.value = product.imageUrl;
+}
+
+function idInput(value){
+    document.getElementById("id").value = value;
+}
+
+/* ===================================
+   DELETE PRODUCT
+=================================== */
+
+window.deleteProduct =
+async function(id){
+
+    if(!confirm(
+        "Delete this product?"
+    )) return;
+
+    await deleteDoc(
+        doc(db,"products",id)
+    );
+
+    showStatus(
+        "Product deleted"
+    );
+
+    loadProducts();
+}
+
+/* ===================================
+   SEARCH
+=================================== */
+
+window.searchProducts = function(){
+
+    const search =
+    document
+    .getElementById("search")
+    .value
+    .toLowerCase();
+
+    const rows =
+    document.querySelectorAll(
+      "#productTable tr"
+    );
+
+    rows.forEach(row=>{
+
+        row.style.display =
+        row.innerText
+        .toLowerCase()
+        .includes(search)
+        ? ""
+        : "none";
+    });
+}
+
+/* ===================================
+   CLEAR FORM
+=================================== */
+
+window.clearForm = function(){
+
+    document
+    .querySelectorAll("input")
+    .forEach(input=>{
+
+        if(input.id !== "search")
+            input.value="";
+    });
+}
+
+/* ===================================
+   STATUS
+=================================== */
+
+function showStatus(msg){
+
+    const status =
+    document.getElementById("status");
+
+    status.innerText = msg;
+
+    setTimeout(()=>{
+        status.innerText="";
+    },3000);
+}
+
+/* ===================================
+   START
+=================================== */
+
+loadProducts();
+
+</script>
+
+</body>
+</html>
